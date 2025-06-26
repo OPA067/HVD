@@ -3,7 +3,6 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 
-import math
 import os
 import time
 import random
@@ -12,13 +11,12 @@ import numpy as np
 from tqdm import tqdm
 import datetime
 from os.path import join, exists
-from PIL import Image
 
 import torch
 
 from models.tokenization_clip import SimpleTokenizer as ClipTokenizer
 from dataloaders.data_dataloaders import DATALOADER_DICT
-from models.modeling import AllGather, V_Sparse
+from models.modeling import AllGather, My_Model
 from models.optimization import BertAdam
 from utils.metric_logger import MetricLogger
 from utils.metrics import compute_metrics, tensor_text_to_video_metrics, tensor_video_to_text_sim
@@ -115,7 +113,7 @@ def set_seed_logger(args):
     return args
 
 def build_model(args):
-    model = V_Sparse(args)
+    model = My_Model(args)
     if args.init_model:
         if not exists(args.init_model):
             raise FileNotFoundError

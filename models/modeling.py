@@ -8,7 +8,6 @@ from .module_clip import CLIP, convert_weights, _PT_NAME
 from .module_cross import Transformer as TransformerClip
 from .until_module import LayerNorm, AllGather, AllGather2, CrossEn, KL
 from .cluster import PCM, Att_Block_Patch
-from .video_transformers import video_transformers
 
 allgather = AllGather.apply
 allgather2 = AllGather2.apply
@@ -23,10 +22,10 @@ class ResidualLinear(nn.Module):
         x = x + self.fc_relu(x)
         return x
 
-class V_Sparse(nn.Module):
+class My_Model(nn.Module):
     def __init__(self, config):
 
-        super(V_Sparse, self).__init__()
+        super(My_Model, self).__init__()
 
         self.config = config
 
@@ -247,7 +246,7 @@ class V_Sparse(nn.Module):
             sims_w_p = (w2p_logits + p2w_logits) / 2.0
             loss_w_p = self.loss_fct(sims_w_p * logit_scale) + self.loss_fct(sims_w_p.T * logit_scale)
 
-            loss = loss_s_f + loss_s_p * self.alpha + loss_w_p * self.beta
+            loss = loss + loss_s_f + loss_s_p * self.alpha + loss_w_p * self.beta
             return loss
         else:
             return None
