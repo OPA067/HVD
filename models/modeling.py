@@ -8,7 +8,7 @@ from torch import nn
 from .cluster import Att_Block_Patch, PCM
 from .module_clip import CLIP, convert_weights, _PT_NAME
 from .module_cross import Transformer as TransformerClip
-from .module_pts import PatchTokenSelection
+from .module_ftk import PerturbedTopK
 from .until_module import LayerNorm, AllGather, AllGather2, CrossEn, KL
 
 allgather = AllGather.apply
@@ -107,6 +107,8 @@ class Model(nn.Module):
         self.h_max_frames = self.max_frames // 2
         self.alpha, self.beta = self.config.alpha, self.config.beta
 
+        self.ftk = PerturbedTopK(k=self.h_max_frames)
+
         sr_p = [0.5, 0.5, 0.5]
         self.v_pcm_p_1 = PCM(sample_ratio=sr_p[0], embed_dim=embed_dim, dim_out=embed_dim, k=3)
         self.v_att_block_p_1 = Att_Block_Patch(dim=embed_dim, num_heads=8)
@@ -178,16 +180,19 @@ class Model(nn.Module):
         sims_sf = torch.einsum("ad,bfd->abf", [self.norm(s_feat), self.norm(f_feat)])
         sims_sf = sims_sf.diagonal(dim1=0, dim2=1).transpose(0, 1)
         sims_sf = torch.softmax(sims_sf, dim=-1)
-        _, f_max_idx = torch.topk(sims_sf, k=self.h_max_frames, dim=-1, largest=True)
-        f_max_idx, _ = torch.sort(f_max_idx, dim=-1)
-        f_feat_h = f_feat[torch.arange(b)[:, None], f_max_idx, :]
+        sims_sf = self.ftk(sims_sf)  # [b, k, f]
+        f_feat_h = torch.einsum("bkf,bfd->bkd", [sims_sf, f_feat])
+        """ _, f_max_idx = torch.topk(sims_sf, k=self.h_max_frames, dim=-1, largest=True)
+            f_max_idx, _ = torch.sort(f_max_idx, dim=-1)
+            f_feat_h = f_feat[torch.arange(b)[:, None], f_max_idx, :] """
         sims_sf_h = self.s_and_f(s_feat, f_feat_h)
         loss_sf_h = (self.loss_fct(sims_sf_h * logit_scale) + self.loss_fct(sims_sf_h.T * logit_scale)) / 2.0
         sims_wf_h = self.w_and_f(w_feat, f_feat_h)
         loss_wf_h = (self.loss_fct(sims_wf_h * logit_scale) + self.loss_fct(sims_wf_h.T * logit_scale)) / 2.0
 
         ###### Step-II: See one ######
-        p_feat_h = p_feat.reshape(b, f, -1, d)[torch.arange(b)[:, None], f_max_idx, :, :]
+        """ p_feat_h = p_feat.reshape(b, f, -1, d)[torch.arange(b)[:, None], f_max_idx, :, :] """
+        p_feat_h = torch.einsum("bkf,bfpd->bkpd", [sims_sf, p_feat.reshape(b, f, -1, d)])
         p_feat_h = p_feat_h.reshape(b, -1, d)
         p_feat_h = self.get_less_patch_feat(p_feat_h)
         sims_sp_h = self.s_and_p(s_feat, p_feat_h)
